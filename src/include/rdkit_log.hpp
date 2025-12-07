@@ -3,6 +3,6 @@
 
 namespace duckdb_rdkit {
 
-void RegisterCasts(ExtensionLoader &loader);
+void RegisterLogFunctions(ExtensionLoader &loader);
 
 } // namespace duckdb_rdkit

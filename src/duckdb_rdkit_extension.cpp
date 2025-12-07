@@ -1,5 +1,6 @@
 #include "duckdb/common/types.hpp"
 #include "mol_descriptors.hpp"
+#include "rdkit_log.hpp"
 #include "sdf_scanner/sdf_functions.hpp"
 
 #define DUCKDB_EXTENSION_MAIN
@@ -26,6 +27,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   duckdb_rdkit::RegisterFormatFunctions(loader);
   duckdb_rdkit::RegisterCompareFunctions(loader);
   duckdb_rdkit::RegisterDescriptorFunctions(loader);
+  duckdb_rdkit::RegisterLogFunctions(loader);
 
   for (auto &fun : SDFFunctions::GetTableFunctions()) {
     loader.RegisterFunction(fun);

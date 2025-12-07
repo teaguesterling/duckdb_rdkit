@@ -45,6 +45,18 @@ SELECT 'C1=CC=CC=C1'::mol;
 ----
 c1ccccc1
 
+# ::mol cast with invalid SMILES throws an error (consistent with DuckDB native types)
+statement error
+SELECT 'NOTASMILES'::mol;
+----
+Conversion Error: Could not convert string 'NOTASMILES' to Mol
+
+# TRY_CAST returns NULL for invalid SMILES without error
+query I
+SELECT TRY_CAST('NOTASMILES' AS mol);
+----
+NULL
+
 # mol_to_rdkit_mol can convert the internal representation of a molecule in 
 # duckdb (umbra_mol) to the RDKit molecule.  This will output hex representation
 query I

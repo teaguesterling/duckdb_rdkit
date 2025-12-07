@@ -18,7 +18,7 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 project(${TARGET_NAME})
 include_directories(src/include)
 
-set(EXTENSION_SOURCES 
+set(EXTENSION_SOURCES
     src/sdf_scanner/sdf_functions.cpp
     src/sdf_scanner/sdf_scan.cpp
     src/cast.cpp
@@ -29,6 +29,7 @@ set(EXTENSION_SOURCES
     src/umbra_mol.cpp
     src/mol_descriptors.cpp
     src/qed.cpp
+    src/rdkit_log.cpp
 )
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})

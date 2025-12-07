@@ -1,5 +1,6 @@
 #include "common.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/exception/conversion_exception.hpp"
 #include "duckdb/common/operator/cast_operators.hpp"
 #include "duckdb/common/types/string_type.hpp"
 #include "duckdb/common/types/vector.hpp"
@@ -21,12 +22,13 @@ namespace duckdb_rdkit {
 // This enables the user to insert into a Mol column by just writing the SMILES
 // Duckdb will try to convert the string to a rdkit mol
 // This is consistent with the RDKit Postgres cartridge behavior
-void VarcharToMol(Vector &source, Vector &result, idx_t count) {
+bool VarcharToMolCast(Vector &source, Vector &result, idx_t count,
+                      CastParameters &parameters) {
+  bool all_converted = true;
   UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
       source, result, count,
       [&](string_t smiles, ValidityMask &mask, idx_t idx) {
         try {
-
           // this varchar is just a regular string, not a umbramol
           // Try to see if it is a SMILES
           auto mol = rdkit_mol_from_smiles(smiles.GetString());
@@ -34,20 +36,18 @@ void VarcharToMol(Vector &source, Vector &result, idx_t count) {
 
           return StringVector::AddStringOrBlob(result, umbra_mol);
         } catch (...) {
-          std::cout << "WARNING: could not create molecule from SMILES\n"
-                    << smiles.GetData() << std::endl;
-          // printf("WARNING: could not create molecule from SMILES %s\n",
-          //        smiles.GetData());
+          std::string error_msg = StringUtil::Format(
+              "Could not convert string '%s' to Mol", smiles.GetString());
+          if (parameters.strict) {
+            throw ConversionException(error_msg);
+          }
+          HandleCastError::AssignError(error_msg, parameters);
+          all_converted = false;
           mask.SetInvalid(idx);
           return string_t();
         }
       });
-}
-
-bool VarcharToMolCast(Vector &source, Vector &result, idx_t count,
-                      CastParameters &parameters) {
-  VarcharToMol(source, result, count);
-  return true;
+  return all_converted;
 }
 
 void MolToVarchar(Vector &source, Vector &result, idx_t count) {
