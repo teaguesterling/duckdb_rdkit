@@ -156,12 +156,8 @@ else()
         RDKit_Catalogs
         RDKit_MolEnumerator
         RDKit_CIPLabeler
-        RDKit_GenericGroups
         RDKit_DistGeomHelpers
         RDKit_DistGeometry
-        RDKit_Depictor
-        RDKit_coordgen
-        RDKit_maeparser
         RDKit_O3AAlign
         RDKit_MolAlign
         RDKit_Alignment
@@ -175,6 +171,10 @@ else()
         RDKit_SubstructMatch
         RDKit_Subgraphs
         RDKit_FileParsers
+        RDKit_GenericGroups
+        RDKit_Depictor
+        RDKit_coordgen
+        RDKit_maeparser
         RDKit_SmilesParse
         RDKit_MolTransforms
         RDKit_GraphMol
@@ -187,6 +187,7 @@ else()
         RDKit_MolAlign
         RDKit_Alignment
         RDKit_Depictor
+        RDKit_GenericGroups
         RDKit_SubstructMatch
         RDKit_ChemTransforms
         RDKit_FileParsers
