@@ -75,15 +75,42 @@ else()
             -DRDK_USE_BOOST_SERIALIZATION=ON
             -DRDK_USE_BOOST_IOSTREAMS=ON
         BUILD_BYPRODUCTS
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitSmilesParse_static.a
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitGraphMol_static.a
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitDescriptors_static.a
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitFileParsers_static.a
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitSubstructMatch_static.a
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitFingerprints_static.a
-            ${RDKIT_INSTALL_DIR}/lib/libRDKitDataStructs_static.a
             ${RDKIT_INSTALL_DIR}/lib/libRDKitRDGeneral_static.a
             ${RDKIT_INSTALL_DIR}/lib/libRDKitRDGeometryLib_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitRDStreams_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitDataStructs_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitRingDecomposerLib_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitGraphMol_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitSmilesParse_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitFileParsers_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitSubgraphs_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitSubstructMatch_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitChemTransforms_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitFingerprints_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitDescriptors_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitPartialCharges_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitMolTransforms_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitForceField_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitForceFieldHelpers_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitEigenSolvers_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitAlignment_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitMolAlign_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitDistGeometry_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitDistGeomHelpers_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitDepictor_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitcoordgen_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitmaeparser_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitGenericGroups_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitCIPLabeler_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitMolEnumerator_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitCatalogs_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitFilterCatalog_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitFragCatalog_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitMolStandardize_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitTautomerQuery_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitMolInterchange_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitChemReactions_static.a
+            ${RDKIT_INSTALL_DIR}/lib/libRDKitO3AAlign_static.a
     )
 
     # Include RDKit headers - use BEFORE to ensure they come before system includes
