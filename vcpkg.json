@@ -2,6 +2,8 @@
   "dependencies": [
     "boost-system",
     "boost-serialization",
-    "boost-iostreams"
+    "boost-iostreams",
+    "boost-graph",
+    "boost-json"
   ]
 }
