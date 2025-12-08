@@ -16,3 +16,4 @@ CMakeFiles
 chembl_postgres
 *.parquet
 venv/
+rdkit_external-prefix/
