@@ -143,10 +143,9 @@ else()
     add_rdkit_imported_lib(ChemReactions)
     add_rdkit_imported_lib(O3AAlign)
 
-    # Link order matters for static libraries - list dependencies after dependents
-    # and repeat core libraries at the end to resolve circular dependencies
-    set(DUCKDB_RDKIT_LIBRARIES
-        # High-level libraries first
+    # Use linker group to handle circular dependencies between RDKit static libraries
+    # This is more robust than manually ordering libraries
+    set(RDKIT_STATIC_LIBS
         RDKit_ChemReactions
         RDKit_MolInterchange
         RDKit_TautomerQuery
@@ -183,24 +182,28 @@ else()
         RDKit_RDStreams
         RDKit_RDGeometryLib
         RDKit_RDGeneral
-        # Repeat libs to resolve circular dependencies
-        RDKit_MolAlign
-        RDKit_Alignment
-        RDKit_Depictor
-        RDKit_GenericGroups
-        RDKit_SubstructMatch
-        RDKit_ChemTransforms
-        RDKit_FileParsers
-        RDKit_SmilesParse
-        RDKit_GraphMol
-        RDKit_RingDecomposerLib
-        RDKit_DataStructs
-        RDKit_RDGeometryLib
-        RDKit_RDGeneral
-        Boost::serialization
-        Boost::iostreams
-        Boost::system
     )
+
+    # Wrap RDKit libraries in a linker group to resolve circular dependencies
+    if(UNIX AND NOT APPLE)
+        set(DUCKDB_RDKIT_LIBRARIES
+            -Wl,--start-group
+            ${RDKIT_STATIC_LIBS}
+            -Wl,--end-group
+            Boost::serialization
+            Boost::iostreams
+            Boost::system
+        )
+    else()
+        # On macOS/Windows, repeat libs to resolve circular dependencies
+        set(DUCKDB_RDKIT_LIBRARIES
+            ${RDKIT_STATIC_LIBS}
+            ${RDKIT_STATIC_LIBS}
+            Boost::serialization
+            Boost::iostreams
+            Boost::system
+        )
+    endif()
 endif()
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
