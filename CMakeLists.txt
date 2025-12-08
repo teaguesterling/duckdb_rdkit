@@ -105,70 +105,97 @@ else()
         add_dependencies(RDKit_${name} rdkit_external)
     endmacro()
 
-    # Special macro for libraries without the RDKit prefix (coordgen, maeparser)
-    macro(add_rdkit_external_lib name)
-        add_library(RDKit_${name} STATIC IMPORTED)
-        set_target_properties(RDKit_${name} PROPERTIES
-            IMPORTED_LOCATION ${RDKIT_LIB_DIR}/lib${name}_static.a)
-        add_dependencies(RDKit_${name} rdkit_external)
-    endmacro()
-
-    add_rdkit_imported_lib(SmilesParse)
-    add_rdkit_imported_lib(GraphMol)
-    add_rdkit_imported_lib(Descriptors)
-    add_rdkit_imported_lib(FileParsers)
-    add_rdkit_imported_lib(SubstructMatch)
-    add_rdkit_imported_lib(Fingerprints)
-    add_rdkit_imported_lib(DataStructs)
+    # Core RDKit libraries
     add_rdkit_imported_lib(RDGeneral)
     add_rdkit_imported_lib(RDGeometryLib)
-
-    # Additional RDKit dependencies that may be needed
-    add_rdkit_imported_lib(Depictor)
-    add_rdkit_external_lib(coordgen)
-    add_rdkit_external_lib(maeparser)
-    add_rdkit_imported_lib(ChemTransforms)
-    add_rdkit_imported_lib(GenericGroups)
+    add_rdkit_imported_lib(RDStreams)
+    add_rdkit_imported_lib(DataStructs)
+    add_rdkit_imported_lib(RingDecomposerLib)
+    add_rdkit_imported_lib(GraphMol)
+    add_rdkit_imported_lib(SmilesParse)
+    add_rdkit_imported_lib(FileParsers)
     add_rdkit_imported_lib(Subgraphs)
-    add_rdkit_imported_lib(MolTransforms)
+    add_rdkit_imported_lib(SubstructMatch)
+    add_rdkit_imported_lib(ChemTransforms)
+    add_rdkit_imported_lib(Fingerprints)
+    add_rdkit_imported_lib(Descriptors)
     add_rdkit_imported_lib(PartialCharges)
-    add_rdkit_imported_lib(ForceFieldHelpers)
+    add_rdkit_imported_lib(MolTransforms)
     add_rdkit_imported_lib(ForceField)
+    add_rdkit_imported_lib(ForceFieldHelpers)
     add_rdkit_imported_lib(EigenSolvers)
     add_rdkit_imported_lib(Alignment)
     add_rdkit_imported_lib(MolAlign)
     add_rdkit_imported_lib(DistGeometry)
     add_rdkit_imported_lib(DistGeomHelpers)
+    add_rdkit_imported_lib(Depictor)
+    add_rdkit_imported_lib(coordgen)
+    add_rdkit_imported_lib(maeparser)
+    add_rdkit_imported_lib(GenericGroups)
     add_rdkit_imported_lib(CIPLabeler)
     add_rdkit_imported_lib(MolEnumerator)
+    add_rdkit_imported_lib(Catalogs)
+    add_rdkit_imported_lib(FilterCatalog)
+    add_rdkit_imported_lib(FragCatalog)
+    add_rdkit_imported_lib(MolStandardize)
+    add_rdkit_imported_lib(TautomerQuery)
+    add_rdkit_imported_lib(MolInterchange)
+    add_rdkit_imported_lib(ChemReactions)
+    add_rdkit_imported_lib(O3AAlign)
 
+    # Link order matters for static libraries - list dependencies after dependents
+    # and repeat core libraries at the end to resolve circular dependencies
     set(DUCKDB_RDKIT_LIBRARIES
-        RDKit_SmilesParse
-        RDKit_GraphMol
-        RDKit_Descriptors
-        RDKit_FileParsers
-        RDKit_SubstructMatch
-        RDKit_Fingerprints
-        RDKit_DataStructs
-        RDKit_RDGeneral
-        RDKit_RDGeometryLib
+        # High-level libraries first
+        RDKit_ChemReactions
+        RDKit_MolInterchange
+        RDKit_TautomerQuery
+        RDKit_MolStandardize
+        RDKit_FilterCatalog
+        RDKit_FragCatalog
+        RDKit_Catalogs
+        RDKit_MolEnumerator
+        RDKit_CIPLabeler
+        RDKit_GenericGroups
+        RDKit_DistGeomHelpers
+        RDKit_DistGeometry
         RDKit_Depictor
         RDKit_coordgen
         RDKit_maeparser
-        RDKit_ChemTransforms
-        RDKit_GenericGroups
-        RDKit_Subgraphs
-        RDKit_MolTransforms
-        RDKit_PartialCharges
+        RDKit_O3AAlign
+        RDKit_MolAlign
+        RDKit_Alignment
+        RDKit_EigenSolvers
         RDKit_ForceFieldHelpers
         RDKit_ForceField
-        RDKit_EigenSolvers
-        RDKit_Alignment
+        RDKit_Descriptors
+        RDKit_PartialCharges
+        RDKit_Fingerprints
+        RDKit_ChemTransforms
+        RDKit_SubstructMatch
+        RDKit_Subgraphs
+        RDKit_FileParsers
+        RDKit_SmilesParse
+        RDKit_MolTransforms
+        RDKit_GraphMol
+        RDKit_RingDecomposerLib
+        RDKit_DataStructs
+        RDKit_RDStreams
+        RDKit_RDGeometryLib
+        RDKit_RDGeneral
+        # Repeat libs to resolve circular dependencies
         RDKit_MolAlign
-        RDKit_DistGeometry
-        RDKit_DistGeomHelpers
-        RDKit_CIPLabeler
-        RDKit_MolEnumerator
+        RDKit_Alignment
+        RDKit_Depictor
+        RDKit_SubstructMatch
+        RDKit_ChemTransforms
+        RDKit_FileParsers
+        RDKit_SmilesParse
+        RDKit_GraphMol
+        RDKit_RingDecomposerLib
+        RDKit_DataStructs
+        RDKit_RDGeometryLib
+        RDKit_RDGeneral
         Boost::serialization
         Boost::iostreams
         Boost::system
