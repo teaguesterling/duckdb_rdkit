@@ -110,7 +110,7 @@ unique_ptr<FunctionData> ReadSDFBind(ClientContext &context,
                                   "specification must be VARCHAR.");
           }
 
-          if (type.ToString() == duckdb_rdkit::Mol().ToString()) {
+          if (StringUtil::CIEquals(type.ToString(), duckdb_rdkit::Mol().ToString())) {
             bind_data->mol_col_idx = i;
             return_types.emplace_back(duckdb_rdkit::Mol());
           } else {
@@ -134,6 +134,12 @@ unique_ptr<FunctionData> ReadSDFBind(ClientContext &context,
       // bind_data->convert_strings_to_integers =
       // BooleanValue::Get(kv.second);
       // }
+    }
+    //! For read_sdf (non-auto), COLUMNS parameter is required
+    if (names.empty()) {
+      throw BinderException(
+          "read_sdf requires a COLUMNS parameter. Use read_sdf_auto to auto-detect columns, "
+          "or specify columns like: read_sdf('file.sdf', COLUMNS={'col1': 'VARCHAR', 'mol': 'Mol'})");
     }
   }
   //! get the files - convert string paths to OpenFileInfo

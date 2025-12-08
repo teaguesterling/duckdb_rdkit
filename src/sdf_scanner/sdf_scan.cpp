@@ -2,6 +2,7 @@
 #include "duckdb/common/allocator.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/common/vector_size.hpp"
@@ -50,9 +51,16 @@ SDFScanGlobalState::SDFScanGlobalState(ClientContext &context_p,
                                        const SDFScanData &bind_data_p)
     : bind_data(bind_data_p) {
   //! open the sd file
-  mol_supplier =
-      make_uniq<RDKit::v2::FileParsers::SDMolSupplier>(bind_data.files[0]);
-  length = mol_supplier->length();
+  //! RDKit throws an exception for empty/invalid files
+  try {
+    mol_supplier =
+        make_uniq<RDKit::v2::FileParsers::SDMolSupplier>(bind_data.files[0]);
+    length = mol_supplier->length();
+  } catch (const std::exception &e) {
+    //! Empty or invalid SDF file - set length to 0
+    mol_supplier = nullptr;
+    length = 0;
+  }
   offset = 0;
 }
 
@@ -75,6 +83,11 @@ void SDFScanLocalState::ExtractNextChunk(SDFScanGlobalState &gstate,
   //! and duckdb will be signalled that the scanning is complete
   lstate.scan_count = 0;
   lstate.rows.clear();
+
+  //! If mol_supplier is null (empty/invalid file), return immediately
+  if (!gstate.mol_supplier) {
+    return;
+  }
 
   while (lstate.scan_count < STANDARD_VECTOR_SIZE &&
          !gstate.mol_supplier->atEnd()) {
@@ -102,7 +115,7 @@ void SDFScanLocalState::ExtractNextChunk(SDFScanGlobalState &gstate,
         //! The column at the current iteration of i is the Mol type
         //! In this case, we should convert the molecule object
         //! to the "umbra" mol in duckdb_rdkit
-        if (bind_data.types[i] == duckdb_rdkit::Mol().ToString()) {
+        if (StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::Mol().ToString())) {
           auto res = duckdb_rdkit::get_umbra_mol_string(*cur_mol);
           cur_row.emplace_back(res);
         } else {
@@ -132,30 +145,35 @@ void SDFScan::AutoDetect(ClientContext &context, SDFScanData &bind_data,
                          vector<LogicalType> &return_types,
                          vector<string> &names) {
   //! open the sd file to scan the first record
-  auto mol_supplier =
-      make_uniq<RDKit::v2::FileParsers::SDMolSupplier>(bind_data.files[0]);
-  while (!mol_supplier->atEnd()) {
+  //! RDKit throws an exception for empty/invalid files, so we catch it
+  try {
+    auto mol_supplier =
+        make_uniq<RDKit::v2::FileParsers::SDMolSupplier>(bind_data.files[0]);
+    while (!mol_supplier->atEnd()) {
 
-    auto cur_mol = mol_supplier->next();
-    std::set<string> seen;
-    if (cur_mol) {
-      for (auto p : cur_mol->getPropList()) {
-        //! These are props seem to be added by RDKit...these are there
-        //! even if the SDF doesn't contain these properties
-        if (p != "__computedProps" && p != "_Name" && p != "_MolFileInfo" &&
-            p != "_MolFileComments" && p != "_MolFileChiralFlag" &&
-            p != "numArom" && p != "_StereochemDone") {
-          names.push_back(p);
-          bind_data.types.emplace_back(
-              LogicalTypeIdToString(LogicalTypeId::VARCHAR));
-          return_types.emplace_back(TransformStringToLogicalType(
-              StringValue::Get("VARCHAR"), context));
+      auto cur_mol = mol_supplier->next();
+      std::set<string> seen;
+      if (cur_mol) {
+        for (auto p : cur_mol->getPropList()) {
+          //! These are props seem to be added by RDKit...these are there
+          //! even if the SDF doesn't contain these properties
+          if (p != "__computedProps" && p != "_Name" && p != "_MolFileInfo" &&
+              p != "_MolFileComments" && p != "_MolFileChiralFlag" &&
+              p != "numArom" && p != "_StereochemDone") {
+            names.push_back(p);
+            bind_data.types.emplace_back(
+                LogicalTypeIdToString(LogicalTypeId::VARCHAR));
+            return_types.emplace_back(TransformStringToLogicalType(
+                StringValue::Get("VARCHAR"), context));
+          }
         }
+        break;
       }
-      break;
     }
+    mol_supplier->close();
+  } catch (const std::exception &e) {
+    //! Empty or invalid SDF file - we'll just return the mol column
   }
-  mol_supplier->close();
 
   //! The molecule block is not in the getPropList
   names.push_back("mol");

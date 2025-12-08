@@ -41,9 +41,33 @@ CHEBI:598	1-alkyl-2-acylglycerol	3	*C(=O)OC(CO)CO[1*]
 # joins betwen sdf file and duckdb table successful
 query IIII
 SELECT new_tbl.* FROM new_tbl
-INNER JOIN read_sdf('test/sql/sdf_scanner/test_sdf_2.sdf', COLUMNS={'ChEBI ID': 'VARCHAR','ChEBI Name': 'VARCHAR', Star: 'VARCHAR', mol: 'Mol'}) AS second 
+INNER JOIN read_sdf('test/sql/sdf_scanner/test_sdf_2.sdf', COLUMNS={'ChEBI ID': 'VARCHAR','ChEBI Name': 'VARCHAR', Star: 'VARCHAR', mol: 'Mol'}) AS second
 ON new_tbl.mol=second.mol;
 ----
 CHEBI:90	(-)-epicatechin	3	Oc1cc(O)c2c(c1)O[C@H](c1ccc(O)c(O)c1)[C@H](O)C2
 CHEBI:598	1-alkyl-2-acylglycerol	3	*C(=O)OC(CO)CO[1*]
+
+# read_sdf without COLUMNS parameter should give helpful error
+statement error
+SELECT * FROM read_sdf('test/sql/sdf_scanner/test_sdf.sdf');
+----
+read_sdf requires a COLUMNS parameter
+
+# empty SDF file with read_sdf_auto returns empty result with mol column
+query I
+SELECT * FROM read_sdf_auto('test/sql/sdf_scanner/empty.sdf');
+----
+
+# empty SDF file with explicit COLUMNS returns empty result
+query II
+SELECT * FROM read_sdf('test/sql/sdf_scanner/empty.sdf', COLUMNS={'id': 'VARCHAR', 'mol': 'Mol'});
+----
+
+# case-insensitive Mol type specification (MOL, mol, Mol all work)
+query II
+SELECT * FROM read_sdf('test/sql/sdf_scanner/test_sdf.sdf', COLUMNS={'ChEBI ID': 'VARCHAR', 'mol': 'MOL'});
+----
+CHEBI:90	Oc1cc(O)c2c(c1)O[C@H](c1ccc(O)c(O)c1)[C@H](O)C2
+CHEBI:165	CC1(C)C(=O)[C@@]2(C)CC[C@@H]1C2
+CHEBI:598	*C(=O)OC(CO)CO[1*]
 
