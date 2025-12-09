@@ -1,10 +1,12 @@
 {
   "dependencies": [
-    "boost-system",
-    "boost-serialization",
-    "boost-iostreams",
+    "boost-format",
     "boost-graph",
+    "boost-iostreams",
     "boost-json",
+    "boost-serialization",
+    "boost-stacktrace",
+    "boost-system",
     "freetype"
   ]
 }
