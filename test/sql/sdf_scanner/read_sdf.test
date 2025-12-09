@@ -71,3 +71,44 @@ CHEBI:90	Oc1cc(O)c2c(c1)O[C@H](c1ccc(O)c(O)c1)[C@H](O)C2
 CHEBI:165	CC1(C)C(=O)[C@@]2(C)CC[C@@H]1C2
 CHEBI:598	*C(=O)OC(CO)CO[1*]
 
+# moltype parameter tests
+
+# moltype='mol' with read_sdf_auto returns Mol type (default)
+query I
+SELECT typeof(mol) FROM read_sdf_auto('test/sql/sdf_scanner/test_sdf.sdf', moltype='mol') LIMIT 1;
+----
+Mol
+
+# moltype='umbramol' with read_sdf_auto returns UmbraMol type
+query I
+SELECT typeof(mol) FROM read_sdf_auto('test/sql/sdf_scanner/test_sdf.sdf', moltype='umbramol') LIMIT 1;
+----
+UmbraMol
+
+# moltype='molstruct' with read_sdf_auto returns MolStruct type
+query I
+SELECT typeof(mol) FROM read_sdf_auto('test/sql/sdf_scanner/test_sdf.sdf', moltype='molstruct') LIMIT 1;
+----
+MolStruct
+
+# moltype with read_sdf (explicit columns) returns correct type
+query I
+SELECT typeof(mol) FROM read_sdf('test/sql/sdf_scanner/test_sdf.sdf', COLUMNS={'mol': 'Mol'}, moltype='umbramol') LIMIT 1;
+----
+UmbraMol
+
+# MolStruct fields can be extracted and used
+query II
+SELECT
+  struct_extract(mol::STRUCT(mol BLOB, dalke_fp UBIGINT), 'dalke_fp') as fp,
+  mol_to_smiles(struct_extract(mol::STRUCT(mol BLOB, dalke_fp UBIGINT), 'mol')::Mol) as smiles
+FROM read_sdf_auto('test/sql/sdf_scanner/test_sdf.sdf', moltype='molstruct') LIMIT 1;
+----
+4179379487140505727	Oc1cc(O)c2c(c1)O[C@H](c1ccc(O)c(O)c1)[C@H](O)C2
+
+# invalid moltype value gives error
+statement error
+SELECT * FROM read_sdf_auto('test/sql/sdf_scanner/test_sdf.sdf', moltype='invalid');
+----
+moltype
+

@@ -121,6 +121,26 @@ bool UmbraMolToBlobCast(Vector &source, Vector &result, idx_t count,
   return true;
 }
 
+// BLOB -> Mol: Identity cast (Mol is a BLOB alias, data is RDKit pickle)
+bool BlobToMolCast(Vector &source, Vector &result, idx_t count,
+                   CastParameters &parameters) {
+  UnaryExecutor::Execute<string_t, string_t>(
+      source, result, count, [&](string_t blob) {
+        return StringVector::AddStringOrBlob(result, blob.GetString());
+      });
+  return true;
+}
+
+// BLOB -> UmbraMol: Identity cast (UmbraMol is a BLOB alias)
+bool BlobToUmbraMolCast(Vector &source, Vector &result, idx_t count,
+                        CastParameters &parameters) {
+  UnaryExecutor::Execute<string_t, string_t>(
+      source, result, count, [&](string_t blob) {
+        return StringVector::AddStringOrBlob(result, blob.GetString());
+      });
+  return true;
+}
+
 void RegisterCasts(ExtensionLoader &loader) {
   // Mol casts (pure RDKit pickle)
   loader.RegisterCastFunction(LogicalType::VARCHAR, duckdb_rdkit::Mol(),
@@ -129,6 +149,8 @@ void RegisterCasts(ExtensionLoader &loader) {
                               BoundCastInfo(MolToVarcharCast), 1);
   loader.RegisterCastFunction(duckdb_rdkit::Mol(), LogicalType::BLOB,
                               BoundCastInfo(MolToBlobCast), 1);
+  loader.RegisterCastFunction(LogicalType::BLOB, duckdb_rdkit::Mol(),
+                              BoundCastInfo(BlobToMolCast), 1);
 
   // UmbraMol casts ([8B DalkeFP][RDKit Pickle])
   loader.RegisterCastFunction(LogicalType::VARCHAR, duckdb_rdkit::UmbraMol(),
@@ -137,6 +159,8 @@ void RegisterCasts(ExtensionLoader &loader) {
                               BoundCastInfo(UmbraMolToVarcharCast), 1);
   loader.RegisterCastFunction(duckdb_rdkit::UmbraMol(), LogicalType::BLOB,
                               BoundCastInfo(UmbraMolToBlobCast), 1);
+  loader.RegisterCastFunction(LogicalType::BLOB, duckdb_rdkit::UmbraMol(),
+                              BoundCastInfo(BlobToUmbraMolCast), 1);
 }
 
 } // namespace duckdb_rdkit

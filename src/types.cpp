@@ -37,11 +37,25 @@ LogicalType DalkeFP() {
   return uint64_type;
 }
 
+// MolStruct: STRUCT(mol BLOB, dalke_fp UBIGINT)
+// Stores molecule (RDKit pickle) and fingerprint as separate columns for flexible access
+// Useful for columnar storage where FP can be scanned independently
+// Uses base types (BLOB, UBIGINT) to avoid cast issues during struct creation
+LogicalType MolStruct() {
+  child_list_t<LogicalType> children;
+  children.push_back(make_pair("mol", LogicalType::BLOB));
+  children.push_back(make_pair("dalke_fp", LogicalType::UBIGINT));
+  auto struct_type = LogicalType::STRUCT(std::move(children));
+  struct_type.SetAlias("MolStruct");
+  return struct_type;
+}
+
 void RegisterTypes(ExtensionLoader &loader) {
   // Register all molecule-related types
   loader.RegisterType("Mol", Mol());
   loader.RegisterType("UmbraMol", UmbraMol());
   loader.RegisterType("DalkeFP", DalkeFP());
+  loader.RegisterType("MolStruct", MolStruct());
 }
 
 } // namespace duckdb_rdkit

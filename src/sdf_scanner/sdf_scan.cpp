@@ -113,14 +113,21 @@ void SDFScanLocalState::ExtractNextChunk(SDFScanGlobalState &gstate,
       //! to be returned even if the molecule cannot be parsed
       if (cur_mol) {
         //! The column at the current iteration of i is the Mol type
-        //! Convert molecule to pure RDKit pickle format
-        if (StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::Mol().ToString())) {
-          auto res = duckdb_rdkit::rdkit_mol_to_binary_mol(*cur_mol);
-          cur_row.emplace_back(res);
-        } else if (StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::UmbraMol().ToString())) {
-          //! UmbraMol format: [8B DalkeFP][RDKit Pickle]
-          auto res = duckdb_rdkit::get_umbra_mol_string(*cur_mol);
-          cur_row.emplace_back(res);
+        //! Use moltype parameter to determine output format
+        if (StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::Mol().ToString()) ||
+            StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::UmbraMol().ToString()) ||
+            StringUtil::CIEquals(bind_data.types[i], "MolStruct")) {
+          if (StringUtil::CIEquals(bind_data.moltype, "umbramol") ||
+              StringUtil::CIEquals(bind_data.moltype, "molstruct")) {
+            //! UmbraMol/MolStruct: store as [8B DalkeFP][RDKit Pickle]
+            //! For MolStruct, this will be split into struct fields in ReadSDFFunction
+            auto res = duckdb_rdkit::get_umbra_mol_string(*cur_mol);
+            cur_row.emplace_back(res);
+          } else {
+            //! Default: pure RDKit pickle format
+            auto res = duckdb_rdkit::rdkit_mol_to_binary_mol(*cur_mol);
+            cur_row.emplace_back(res);
+          }
         } else {
           //! Otherwise, it is a normal property column
           std::string prop;
@@ -180,9 +187,18 @@ void SDFScan::AutoDetect(ClientContext &context, SDFScanData &bind_data,
 
   //! The molecule block is not in the getPropList
   names.push_back("mol");
-  bind_data.types.push_back("Mol");
   bind_data.mol_col_idx = names.size() - 1;
-  return_types.emplace_back(duckdb_rdkit::Mol());
+  //! Use moltype parameter to determine output type
+  if (StringUtil::CIEquals(bind_data.moltype, "umbramol")) {
+    bind_data.types.push_back("UmbraMol");
+    return_types.emplace_back(duckdb_rdkit::UmbraMol());
+  } else if (StringUtil::CIEquals(bind_data.moltype, "molstruct")) {
+    bind_data.types.push_back("MolStruct");
+    return_types.emplace_back(duckdb_rdkit::MolStruct());
+  } else {
+    bind_data.types.push_back("Mol");
+    return_types.emplace_back(duckdb_rdkit::Mol());
+  }
   bind_data.names = names;
 }
 

@@ -34,6 +34,10 @@ public:
   //! A value of -1 means there is no mol_col_idx set because Mol type was
   //! not requested
   short mol_col_idx = -1;
+
+  //! The molecule type format to use: "mol" (pure RDKit pickle) or "umbramol"
+  //! Default is "mol" for standard RDKit format
+  string moltype = "mol";
 };
 
 struct SDFScanGlobalState {

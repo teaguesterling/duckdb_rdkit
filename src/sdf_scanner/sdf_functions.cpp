@@ -14,6 +14,7 @@
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "sdf_scanner/sdf_scan.hpp"
 #include "types.hpp"
+#include "umbra_mol.hpp"
 
 namespace duckdb {
 
@@ -42,21 +43,41 @@ static void ReadSDFFunction(ClientContext &context, TableFunctionInput &data_p,
   if (bind_data.mol_col_idx == -1) {
     bind_data.mol_col_idx = 0;
   }
-  //! The mol_col is a reference to the DataChunk vector
-  //! This vector is then converted to a FlatVector with the string_t type
-  //! so that we can add blobs to it, which may have invalid UTF8.
-  auto &mol_col = output.data[bind_data.mol_col_idx];
-  auto col_data = FlatVector::GetData<string_t>(mol_col);
+
+  //! For Mol and UmbraMol types, we use FlatVector to add blobs efficiently.
+  //! For MolStruct, we use SetValue instead since it's a STRUCT type.
+  Vector *mol_col_ptr = nullptr;
+  string_t *col_data = nullptr;
+  if (!StringUtil::CIEquals(bind_data.moltype, "molstruct")) {
+    mol_col_ptr = &output.data[bind_data.mol_col_idx];
+    col_data = FlatVector::GetData<string_t>(*mol_col_ptr);
+  }
 
   //! For each record/row scanned, set the value of each
   //! column in the output DataChunk
   for (idx_t i = 0; i < lstate.rows.size(); i++) {
     for (idx_t j = 0; j < bind_data.names.size(); j++) {
       auto val = lstate.rows[i][j];
-      //! handle the molecule column differently because it's a BLOB with
-      //! potentially invalid UTF8
+      //! handle the molecule column differently based on moltype
       if (bind_data.mol_col_idx > -1 && j == bind_data.mol_col_idx) {
-        col_data[i] = StringVector::AddStringOrBlob(mol_col, string_t(val));
+        if (StringUtil::CIEquals(bind_data.moltype, "molstruct")) {
+          //! MolStruct: convert UmbraMol format [8B DalkeFP][pickle] to struct
+          if (val.size() >= duckdb_rdkit::umbra_mol_t::DALKE_FP_PREFIX_BYTES) {
+            uint64_t dalke_fp = 0;
+            std::memcpy(&dalke_fp, val.data(), sizeof(uint64_t));
+            string mol_data = val.substr(duckdb_rdkit::umbra_mol_t::DALKE_FP_PREFIX_BYTES);
+
+            child_list_t<Value> struct_values;
+            struct_values.push_back(make_pair("mol", Value::BLOB(const_data_ptr_cast(mol_data.data()), mol_data.size())));
+            struct_values.push_back(make_pair("dalke_fp", Value::UBIGINT(dalke_fp)));
+            output.SetValue(j, i, Value::STRUCT(std::move(struct_values)));
+          } else {
+            output.SetValue(j, i, Value(nullptr));
+          }
+        } else {
+          //! Mol or UmbraMol: store as blob
+          col_data[i] = StringVector::AddStringOrBlob(*mol_col_ptr, string_t(val));
+        }
       } else {
         if (val == "") {
           output.SetValue(j, i, Value(nullptr));
@@ -74,6 +95,25 @@ unique_ptr<FunctionData> ReadSDFBind(ClientContext &context,
                                      vector<string> &names) {
   auto bind_data = make_uniq<SDFScanData>();
   bind_data->Bind(context, input);
+
+  //! Process moltype parameter first (applies to both read_sdf and read_sdf_auto)
+  for (auto &kv : input.named_parameters) {
+    auto loption = StringUtil::Lower(kv.first);
+    if (loption == "moltype") {
+      if (kv.second.IsNull()) {
+        throw BinderException("read_sdf \"moltype\" parameter cannot be NULL.");
+      }
+      auto moltype_val = StringUtil::Lower(StringValue::Get(kv.second));
+      if (moltype_val != "mol" && moltype_val != "umbramol" && moltype_val != "molstruct") {
+        throw BinderException(
+            "read_sdf \"moltype\" parameter must be 'mol', 'umbramol', or 'molstruct', got '%s'",
+            moltype_val);
+      }
+      bind_data->moltype = moltype_val;
+      break;
+    }
+  }
+
   if (input.table_function.name == "read_sdf_auto") {
     SDFScan::AutoDetect(context, *bind_data, return_types, names);
   } else {
@@ -112,7 +152,25 @@ unique_ptr<FunctionData> ReadSDFBind(ClientContext &context,
 
           if (StringUtil::CIEquals(type.ToString(), duckdb_rdkit::Mol().ToString())) {
             bind_data->mol_col_idx = i;
-            return_types.emplace_back(duckdb_rdkit::Mol());
+            // Use the moltype setting to determine output type
+            if (StringUtil::CIEquals(bind_data->moltype, "umbramol")) {
+              return_types.emplace_back(duckdb_rdkit::UmbraMol());
+            } else if (StringUtil::CIEquals(bind_data->moltype, "molstruct")) {
+              return_types.emplace_back(duckdb_rdkit::MolStruct());
+            } else {
+              return_types.emplace_back(duckdb_rdkit::Mol());
+            }
+          } else if (StringUtil::CIEquals(type.ToString(), duckdb_rdkit::UmbraMol().ToString())) {
+            // Explicit UmbraMol in COLUMNS overrides moltype parameter
+            bind_data->mol_col_idx = i;
+            bind_data->moltype = "umbramol";
+            return_types.emplace_back(duckdb_rdkit::UmbraMol());
+          } else if (StringUtil::CIEquals(type.ToString(), duckdb_rdkit::MolStruct().ToString()) ||
+                     StringUtil::CIEquals(type.ToString(), "MolStruct")) {
+            // Explicit MolStruct in COLUMNS overrides moltype parameter
+            bind_data->mol_col_idx = i;
+            bind_data->moltype = "molstruct";
+            return_types.emplace_back(duckdb_rdkit::MolStruct());
           } else {
             //! All columns that are not Mol type should be converted to a
             //! normal duckdb LogicalType
@@ -128,6 +186,7 @@ unique_ptr<FunctionData> ReadSDFBind(ClientContext &context,
         bind_data->names = names;
         bind_data->types = types;
       }
+      //! moltype is handled before the if/else branch above
 
       //! TODO: not implemented yet
       // else if (loption == "convert_strings_to_integers") {
@@ -195,6 +254,7 @@ TableFunctionSet SDFFunctions::GetReadSDFTableFunction() {
                                SDFLocalTableFunctionState::Init);
   table_function.name = "read_sdf";
   table_function.named_parameters["columns"] = LogicalType::ANY;
+  table_function.named_parameters["moltype"] = LogicalType::VARCHAR;
   table_function.table_scan_progress = SDFScan::ScanProgress;
   table_function.projection_pushdown = false;
   return MultiFileReader::CreateFunctionSet(table_function);
@@ -206,6 +266,7 @@ TableFunctionSet SDFFunctions::GetReadSDFAutoTableFunction() {
                                SDFLocalTableFunctionState::Init);
   table_function.name = "read_sdf_auto";
   table_function.named_parameters["columns"] = LogicalType::ANY;
+  table_function.named_parameters["moltype"] = LogicalType::VARCHAR;
   table_function.table_scan_progress = SDFScan::ScanProgress;
   table_function.projection_pushdown = false;
   return MultiFileReader::CreateFunctionSet(table_function);

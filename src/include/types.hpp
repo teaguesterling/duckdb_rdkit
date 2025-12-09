@@ -16,6 +16,10 @@ LogicalType UmbraMol();
 // DalkeFP: 64-bit substructure screening fingerprint
 LogicalType DalkeFP();
 
+// MolStruct: STRUCT(mol BLOB, dalke_fp UBIGINT)
+// Stores molecule (RDKit pickle) and fingerprint separately for flexible columnar access
+LogicalType MolStruct();
+
 void RegisterTypes(ExtensionLoader &loader);
 
 } // namespace duckdb_rdkit
