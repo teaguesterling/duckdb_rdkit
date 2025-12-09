@@ -7,6 +7,7 @@
     "boost-serialization",
     "boost-stacktrace",
     "boost-system",
-    "freetype"
+    "freetype",
+    "libstacktrace"
   ]
 }
