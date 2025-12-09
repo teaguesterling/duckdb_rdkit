@@ -1,5 +1,6 @@
 {
   "dependencies": [
+    "boost-flyweight",
     "boost-format",
     "boost-graph",
     "boost-iostreams",
