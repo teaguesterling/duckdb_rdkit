@@ -100,3 +100,90 @@ SELECT octet_length('C'::umbramol::blob) > 0;
 ----
 true
 
+# ============================================================================
+# mol_to_smarts tests
+# ============================================================================
+
+# mol_to_smarts converts a molecule to SMARTS notation
+query I
+SELECT mol_to_smarts(mol_from_smiles('C'));
+----
+[#6]
+
+query I
+SELECT mol_to_smarts(mol_from_smiles('CCO'));
+----
+[#6]-[#6]-[#8]
+
+query I
+SELECT mol_to_smarts(mol_from_smiles('c1ccccc1'));
+----
+[#6]1:[#6]:[#6]:[#6]:[#6]:[#6]:1
+
+# mol_to_smarts works with UmbraMol too
+query I
+SELECT mol_to_smarts(umbramol_from_smiles('C'));
+----
+[#6]
+
+# ============================================================================
+# is_valid_smiles tests
+# ============================================================================
+
+query I
+SELECT is_valid_smiles('CCO');
+----
+true
+
+query I
+SELECT is_valid_smiles('c1ccccc1');
+----
+true
+
+query I
+SELECT is_valid_smiles('NOTASMILES');
+----
+false
+
+# Empty string is considered valid by RDKit (returns empty molecule)
+query I
+SELECT is_valid_smiles('');
+----
+true
+
+# Pentavalent carbon is invalid
+query I
+SELECT is_valid_smiles('C(C)(C)(C)(C)C');
+----
+false
+
+# ============================================================================
+# is_valid_smarts tests
+# ============================================================================
+
+query I
+SELECT is_valid_smarts('[#6]');
+----
+true
+
+query I
+SELECT is_valid_smarts('[CX4]');
+----
+true
+
+query I
+SELECT is_valid_smarts('c1ccccc1');
+----
+true
+
+query I
+SELECT is_valid_smarts('NOT_SMARTS!!!');
+----
+false
+
+# Empty string is considered valid by RDKit (returns empty query)
+query I
+SELECT is_valid_smarts('');
+----
+true
+

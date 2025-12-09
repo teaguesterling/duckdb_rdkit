@@ -178,6 +178,77 @@ void umbramol_to_mol(DataChunk &args, ExpressionState &state, Vector &result) {
       });
 }
 
+// ============================================================================
+// mol_to_smarts - convert to SMARTS string
+// ============================================================================
+
+void mol_to_smarts_mol(DataChunk &args, ExpressionState &state, Vector &result) {
+  D_ASSERT(args.data.size() == 1);
+  auto &mol_vec = args.data[0];
+  auto count = args.size();
+
+  UnaryExecutor::Execute<string_t, string_t>(
+      mol_vec, result, count, [&](string_t pickle) {
+        auto mol = rdkit_binary_mol_to_mol(pickle.GetString());
+        auto smarts = RDKit::MolToSmarts(*mol);
+        return StringVector::AddString(result, smarts);
+      });
+}
+
+void mol_to_smarts_umbramol(DataChunk &args, ExpressionState &state, Vector &result) {
+  D_ASSERT(args.data.size() == 1);
+  auto &umbramol_vec = args.data[0];
+  auto count = args.size();
+
+  UnaryExecutor::Execute<string_t, string_t>(
+      umbramol_vec, result, count, [&](string_t b_umbra_mol) {
+        auto umbra_mol = umbra_mol_t(b_umbra_mol);
+        auto mol = rdkit_binary_mol_to_mol(umbra_mol.GetBinaryMol());
+        auto smarts = RDKit::MolToSmarts(*mol);
+        return StringVector::AddString(result, smarts);
+      });
+}
+
+// ============================================================================
+// is_valid_smiles - check if string is a valid SMILES
+// ============================================================================
+
+void is_valid_smiles(DataChunk &args, ExpressionState &state, Vector &result) {
+  D_ASSERT(args.data.size() == 1);
+  auto &smiles_vec = args.data[0];
+  auto count = args.size();
+
+  UnaryExecutor::Execute<string_t, bool>(
+      smiles_vec, result, count, [&](string_t smiles) {
+        try {
+          std::unique_ptr<RDKit::ROMol> mol(RDKit::SmilesToMol(smiles.GetString()));
+          return mol != nullptr;
+        } catch (...) {
+          return false;
+        }
+      });
+}
+
+// ============================================================================
+// is_valid_smarts - check if string is a valid SMARTS
+// ============================================================================
+
+void is_valid_smarts(DataChunk &args, ExpressionState &state, Vector &result) {
+  D_ASSERT(args.data.size() == 1);
+  auto &smarts_vec = args.data[0];
+  auto count = args.size();
+
+  UnaryExecutor::Execute<string_t, bool>(
+      smarts_vec, result, count, [&](string_t smarts) {
+        try {
+          std::unique_ptr<RDKit::ROMol> mol(RDKit::SmartsToMol(smarts.GetString()));
+          return mol != nullptr;
+        } catch (...) {
+          return false;
+        }
+      });
+}
+
 void RegisterFormatFunctions(ExtensionLoader &loader) {
   // mol_from_smiles: SMILES -> Mol (pure RDKit pickle)
   ScalarFunctionSet mol_from_smiles_set("mol_from_smiles");
@@ -210,6 +281,26 @@ void RegisterFormatFunctions(ExtensionLoader &loader) {
   umbramol_to_mol_set.AddFunction(
       ScalarFunction({UmbraMol()}, Mol(), umbramol_to_mol));
   loader.RegisterFunction(umbramol_to_mol_set);
+
+  // mol_to_smarts: Mol/UmbraMol -> SMARTS
+  ScalarFunctionSet mol_to_smarts_set("mol_to_smarts");
+  mol_to_smarts_set.AddFunction(
+      ScalarFunction({Mol()}, LogicalType::VARCHAR, mol_to_smarts_mol));
+  mol_to_smarts_set.AddFunction(
+      ScalarFunction({UmbraMol()}, LogicalType::VARCHAR, mol_to_smarts_umbramol));
+  loader.RegisterFunction(mol_to_smarts_set);
+
+  // is_valid_smiles: VARCHAR -> BOOLEAN
+  ScalarFunctionSet is_valid_smiles_set("is_valid_smiles");
+  is_valid_smiles_set.AddFunction(
+      ScalarFunction({LogicalType::VARCHAR}, LogicalType::BOOLEAN, is_valid_smiles));
+  loader.RegisterFunction(is_valid_smiles_set);
+
+  // is_valid_smarts: VARCHAR -> BOOLEAN
+  ScalarFunctionSet is_valid_smarts_set("is_valid_smarts");
+  is_valid_smarts_set.AddFunction(
+      ScalarFunction({LogicalType::VARCHAR}, LogicalType::BOOLEAN, is_valid_smarts));
+  loader.RegisterFunction(is_valid_smarts_set);
 }
 
 } // namespace duckdb_rdkit

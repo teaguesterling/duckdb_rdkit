@@ -154,6 +154,66 @@ static void is_substruct_umbramol(DataChunk &args, ExpressionState &state,
       });
 }
 
+// ============================================================================
+// substruct_count - count number of substructure matches
+// ============================================================================
+
+// Direct RDKit substructure count
+int _substruct_count_rdkit(const std::string &target_pickle, const std::string &query_pickle) {
+  std::unique_ptr<RDKit::ROMol> target_mol(new RDKit::ROMol());
+  std::unique_ptr<RDKit::ROMol> query_mol(new RDKit::ROMol());
+
+  RDKit::MolPickler::molFromPickle(target_pickle, *target_mol);
+  RDKit::MolPickler::molFromPickle(query_pickle, *query_mol);
+
+  std::vector<RDKit::MatchVectType> matches;
+  bool uniquify = true;
+  bool recursion_possible = true;
+  bool do_chiral_match = false;
+
+  RDKit::SubstructMatch(*target_mol, *query_mol, matches, uniquify, recursion_possible, do_chiral_match);
+  return static_cast<int>(matches.size());
+}
+
+// substruct_count for pure Mol type
+static void substruct_count_mol(DataChunk &args, ExpressionState &state,
+                                Vector &result) {
+  D_ASSERT(args.ColumnCount() == 2);
+  auto &left = args.data[0];
+  auto &right = args.data[1];
+
+  BinaryExecutor::Execute<string_t, string_t, int32_t>(
+      left, right, result, args.size(),
+      [&](string_t &left_pickle, string_t &right_pickle) {
+        return _substruct_count_rdkit(left_pickle.GetString(), right_pickle.GetString());
+      });
+}
+
+// substruct_count for UmbraMol type (with DalkeFP optimization)
+static void substruct_count_umbramol(DataChunk &args, ExpressionState &state,
+                                     Vector &result) {
+  D_ASSERT(args.ColumnCount() == 2);
+  auto &left = args.data[0];
+  auto &right = args.data[1];
+
+  BinaryExecutor::Execute<string_t, string_t, int32_t>(
+      left, right, result, args.size(),
+      [&](string_t &left_umbra_blob, string_t &right_umbra_blob) {
+        auto left_umbra_mol = umbra_mol_t(left_umbra_blob);
+        auto right_umbra_mol = umbra_mol_t(right_umbra_blob);
+
+        // Use DalkeFP for early bailout
+        auto q_dalke_fp = right_umbra_mol.GetDalkeFP();
+        auto t_dalke_fp = left_umbra_mol.GetDalkeFP();
+
+        if (!dalke_fp_contains(t_dalke_fp, q_dalke_fp)) {
+          return 0;
+        }
+
+        return _substruct_count_rdkit(left_umbra_mol.GetBinaryMol(), right_umbra_mol.GetBinaryMol());
+      });
+}
+
 void RegisterCompareFunctions(ExtensionLoader &loader) {
   // is_exact_match: register for both Mol and UmbraMol
   ScalarFunctionSet set("is_exact_match");
@@ -172,6 +232,16 @@ void RegisterCompareFunctions(ExtensionLoader &loader) {
       ScalarFunction({duckdb_rdkit::UmbraMol(), duckdb_rdkit::UmbraMol()},
                      LogicalType::BOOLEAN, is_substruct_umbramol));
   loader.RegisterFunction(set_is_substruct);
+
+  // substruct_count: register for both Mol and UmbraMol
+  ScalarFunctionSet set_substruct_count("substruct_count");
+  set_substruct_count.AddFunction(
+      ScalarFunction({duckdb_rdkit::Mol(), duckdb_rdkit::Mol()},
+                     LogicalType::INTEGER, substruct_count_mol));
+  set_substruct_count.AddFunction(
+      ScalarFunction({duckdb_rdkit::UmbraMol(), duckdb_rdkit::UmbraMol()},
+                     LogicalType::INTEGER, substruct_count_umbramol));
+  loader.RegisterFunction(set_substruct_count);
 }
 
 } // namespace duckdb_rdkit

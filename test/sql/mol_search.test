@@ -93,4 +93,49 @@ SELECT m FROM molecules WHERE is_substruct(m, 'O'::mol);
 CCO
 CCO
 
+# ============================================================================
+# substruct_count tests - count number of substructure matches
+# ============================================================================
+
+# benzene has 6 carbon atoms that match the 'C' pattern
+query I
+SELECT substruct_count('c1ccccc1'::mol, 'C'::mol);
+----
+6
+
+# toluene has 7 carbons total
+query I
+SELECT substruct_count('Cc1ccccc1'::mol, 'C'::mol);
+----
+7
+
+# ethane has 2 carbon matches
+query I
+SELECT substruct_count('CC'::mol, 'C'::mol);
+----
+2
+
+# naphthalene - count benzene rings (fused rings share atoms)
+query I
+SELECT substruct_count('c1ccc2ccccc2c1'::mol, 'c1ccccc1'::mol);
+----
+2
+
+# count hydroxyl groups in glycerol (3 OH groups)
+query I
+SELECT substruct_count('OCC(O)CO'::mol, 'O'::mol);
+----
+3
+
+# no match returns 0
+query I
+SELECT substruct_count('c1ccccc1'::mol, 'N'::mol);
+----
+0
+
+# substruct_count works with UmbraMol too
+query I
+SELECT substruct_count(umbramol_from_smiles('c1ccccc1'), umbramol_from_smiles('C'));
+----
+6
 

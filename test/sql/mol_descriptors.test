@@ -42,3 +42,200 @@ CC	30.04695	0.0	30.07	1.0262	0	0	0
 CCO	46.041866	20.23	46.069	-0.0014000000000000123	1	1	0
 CS(=O)(=O)Nc1ccncc1-c1ccccc1C(F)(F)F	316.04933325200005	59.06	316.30400000000003	3.1389000000000014	1	3	3
 COc1ccc(-c2cc(-c3ccc(S(C)(=O)=O)cc3C(F)(F)F)cnc2N)cn1	423.0864470320001	95.17	423.41600000000005	3.8237000000000023	1	6	4
+
+# ============================================================================
+# mol_formula tests
+# ============================================================================
+
+query I
+SELECT mol_formula(mol_from_smiles('CCO'));
+----
+C2H6O
+
+query I
+SELECT mol_formula(mol_from_smiles('c1ccccc1'));
+----
+C6H6
+
+query I
+SELECT mol_formula(mol_from_smiles('CC(=O)O'));
+----
+C2H4O2
+
+# ============================================================================
+# mol_numatoms tests
+# ============================================================================
+
+# By default, mol_numatoms returns explicit atoms only (no implicit hydrogens)
+query I
+SELECT mol_numatoms(mol_from_smiles('C'));
+----
+1
+
+query I
+SELECT mol_numatoms(mol_from_smiles('CC'));
+----
+2
+
+# With include_implicit_hs=true, includes all atoms including implicit hydrogens
+query I
+SELECT mol_numatoms(mol_from_smiles('C'), true);
+----
+5
+
+query I
+SELECT mol_numatoms(mol_from_smiles('CC'), true);
+----
+8
+
+query I
+SELECT mol_numatoms(mol_from_smiles('CCO'), true);
+----
+9
+
+# ============================================================================
+# mol_numheavyatoms tests (excludes hydrogens)
+# ============================================================================
+
+query I
+SELECT mol_numheavyatoms(mol_from_smiles('C'));
+----
+1
+
+query I
+SELECT mol_numheavyatoms(mol_from_smiles('CCO'));
+----
+3
+
+query I
+SELECT mol_numheavyatoms(mol_from_smiles('c1ccccc1'));
+----
+6
+
+# ============================================================================
+# mol_numheteroatoms tests (non-C, non-H atoms)
+# ============================================================================
+
+query I
+SELECT mol_numheteroatoms(mol_from_smiles('C'));
+----
+0
+
+query I
+SELECT mol_numheteroatoms(mol_from_smiles('CCO'));
+----
+1
+
+query I
+SELECT mol_numheteroatoms(mol_from_smiles('c1ccncc1'));
+----
+1
+
+query I
+SELECT mol_numheteroatoms(mol_from_smiles('c1ccc(O)c(N)c1'));
+----
+2
+
+# ============================================================================
+# mol_numrings tests
+# ============================================================================
+
+query I
+SELECT mol_numrings(mol_from_smiles('CCO'));
+----
+0
+
+query I
+SELECT mol_numrings(mol_from_smiles('c1ccccc1'));
+----
+1
+
+query I
+SELECT mol_numrings(mol_from_smiles('C1CC1'));
+----
+1
+
+# naphthalene has 2 rings
+query I
+SELECT mol_numrings(mol_from_smiles('c1ccc2ccccc2c1'));
+----
+2
+
+# ============================================================================
+# mol_numaromaticrings tests
+# ============================================================================
+
+query I
+SELECT mol_numaromaticrings(mol_from_smiles('CCO'));
+----
+0
+
+query I
+SELECT mol_numaromaticrings(mol_from_smiles('c1ccccc1'));
+----
+1
+
+# cyclopropane is not aromatic
+query I
+SELECT mol_numaromaticrings(mol_from_smiles('C1CC1'));
+----
+0
+
+# naphthalene has 2 aromatic rings
+query I
+SELECT mol_numaromaticrings(mol_from_smiles('c1ccc2ccccc2c1'));
+----
+2
+
+# ============================================================================
+# mol_numaliphaticrings tests
+# ============================================================================
+
+query I
+SELECT mol_numaliphaticrings(mol_from_smiles('CCO'));
+----
+0
+
+# benzene is aromatic, not aliphatic
+query I
+SELECT mol_numaliphaticrings(mol_from_smiles('c1ccccc1'));
+----
+0
+
+# cyclopropane is aliphatic
+query I
+SELECT mol_numaliphaticrings(mol_from_smiles('C1CC1'));
+----
+1
+
+# cyclohexane is aliphatic
+query I
+SELECT mol_numaliphaticrings(mol_from_smiles('C1CCCCC1'));
+----
+1
+
+# ============================================================================
+# mol_fractioncsp3 tests (fraction of sp3 carbons)
+# ============================================================================
+
+query I
+SELECT mol_fractioncsp3(mol_from_smiles('C'));
+----
+1.0
+
+query I
+SELECT mol_fractioncsp3(mol_from_smiles('CCO'));
+----
+1.0
+
+# benzene has no sp3 carbons
+query I
+SELECT mol_fractioncsp3(mol_from_smiles('c1ccccc1'));
+----
+0.0
+
+# toluene has 1 sp3 carbon out of 7
+query I
+SELECT ROUND(mol_fractioncsp3(mol_from_smiles('Cc1ccccc1'))::DECIMAL, 2);
+----
+0.14
