@@ -7,6 +7,15 @@
 
 namespace duckdb_rdkit {
 
+// Mol: Pure RDKit MolPickler binary (NEW default)
 LogicalType Mol();
+
+// UmbraMol: [8B DalkeFP][RDKit Pickle] - single-column optimized format
+LogicalType UmbraMol();
+
+// DalkeFP: 64-bit substructure screening fingerprint
+LogicalType DalkeFP();
+
 void RegisterTypes(ExtensionLoader &loader);
+
 } // namespace duckdb_rdkit

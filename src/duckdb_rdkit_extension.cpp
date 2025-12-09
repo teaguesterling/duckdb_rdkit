@@ -1,4 +1,5 @@
 #include "duckdb/common/types.hpp"
+#include "dalke_fp.hpp"
 #include "mol_descriptors.hpp"
 #include "rdkit_log.hpp"
 #include "sdf_scanner/sdf_functions.hpp"
@@ -28,6 +29,7 @@ static void LoadInternal(ExtensionLoader &loader) {
   duckdb_rdkit::RegisterCompareFunctions(loader);
   duckdb_rdkit::RegisterDescriptorFunctions(loader);
   duckdb_rdkit::RegisterLogFunctions(loader);
+  duckdb_rdkit::RegisterDalkeFPFunctions(loader);
 
   for (auto &fun : SDFFunctions::GetTableFunctions()) {
     loader.RegisterFunction(fun);

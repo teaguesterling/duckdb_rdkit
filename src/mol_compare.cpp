@@ -52,10 +52,25 @@ bool mol_cmp(std::string m1_bmol, std::string m2_bmol) {
   return smi1 == smi2;
 }
 
-static void is_exact_match(DataChunk &args, ExpressionState &state,
-                           Vector &result) {
+// is_exact_match for pure Mol type (no prefix optimization)
+static void is_exact_match_mol(DataChunk &args, ExpressionState &state,
+                               Vector &result) {
   D_ASSERT(args.ColumnCount() == 2);
-  // args.data[i] is a FLAT_VECTOR
+  auto &left = args.data[0];
+  auto &right = args.data[1];
+
+  BinaryExecutor::Execute<string_t, string_t, bool>(
+      left, right, result, args.size(),
+      [&](string_t &left_pickle, string_t &right_pickle) {
+        // Pure Mol: direct RDKit comparison
+        return mol_cmp(left_pickle.GetString(), right_pickle.GetString());
+      });
+}
+
+// is_exact_match for UmbraMol type (with prefix optimization)
+static void is_exact_match_umbramol(DataChunk &args, ExpressionState &state,
+                                    Vector &result) {
+  D_ASSERT(args.ColumnCount() == 2);
   auto &left = args.data[0];
   auto &right = args.data[1];
 
@@ -79,58 +94,54 @@ static void is_exact_match(DataChunk &args, ExpressionState &state,
       });
 }
 
-bool _is_substruct(umbra_mol_t target, umbra_mol_t query) {
-  // if the fragment exists in the query but not in the target,
-  // there is no way for a match. This only works in one direction
-  //
-  // If the fragment exists in the target, but not the query, it is still
-  // possible there is something in the query that matches the target, but
-  // is not captured in the dalke fingerprint
-  //
-  // If all fragments that are on in the query are also on in the target,
-  // this does not mean that the query is a substructure. It is possible
-  // that there is something in the query not captured in the fingerprint
-  // that is present in the query, but not in the target. For example,
-  // if the query has NCCCCCCCC, and the target has the N bit set,
-  // but it could be that the target is only NC
-  //
-  // It is only possible to short-circuit in the false case, not in the
-  // true case
-  auto q_prefix = query.GetPrefixAsInt();
-  auto t_prefix = target.GetPrefixAsInt();
+// Direct RDKit substructure match (used by both Mol and UmbraMol)
+bool _is_substruct_rdkit(const std::string &target_pickle, const std::string &query_pickle) {
+  std::unique_ptr<RDKit::ROMol> target_mol(new RDKit::ROMol());
+  std::unique_ptr<RDKit::ROMol> query_mol(new RDKit::ROMol());
 
-  // The 4 byte prefix in string_t is inlined. This is very fast to check.
-  // If we cannot conclude that the query is NOT a substructure of the target,
-  // we need the rest of the dalke fp. This requires chasing a pointer to the
-  // data of which the next 4 bytes of the dalke fp is at the front of.
-  if ((q_prefix & t_prefix) == q_prefix) {
-    auto q_dalke_fp = query.GetDalkeFP();
-    auto t_dalke_fp = target.GetDalkeFP();
-    if ((q_dalke_fp & t_dalke_fp) == q_dalke_fp) {
-      // query might be substructure of the target -- run a substructure match
-      // on the molecule objects
-      std::unique_ptr<RDKit::ROMol> left_mol(new RDKit::ROMol());
-      std::unique_ptr<RDKit::ROMol> right_mol(new RDKit::ROMol());
+  RDKit::MolPickler::molFromPickle(target_pickle, *target_mol);
+  RDKit::MolPickler::molFromPickle(query_pickle, *query_mol);
 
-      RDKit::MolPickler::molFromPickle(target.GetBinaryMol(), *left_mol);
-      RDKit::MolPickler::molFromPickle(query.GetBinaryMol(), *right_mol);
-
-      // copied from chemicalite
-      RDKit::MatchVectType matchVect;
-      bool recursion_possible = true;
-      bool do_chiral_match =
-          false; /* FIXME: make configurable getDoChiralSSS(); */
-      return RDKit::SubstructMatch(*left_mol, *right_mol, matchVect,
-                                   recursion_possible, do_chiral_match);
-    }
-  }
-  return false;
+  RDKit::MatchVectType matchVect;
+  bool recursion_possible = true;
+  bool do_chiral_match = false; /* FIXME: make configurable getDoChiralSSS(); */
+  return RDKit::SubstructMatch(*target_mol, *query_mol, matchVect,
+                               recursion_possible, do_chiral_match);
 }
 
-static void is_substruct(DataChunk &args, ExpressionState &state,
-                         Vector &result) {
+// UmbraMol substructure match with DalkeFP optimization
+bool _is_substruct_umbramol(umbra_mol_t target, umbra_mol_t query) {
+  // Use the extended DalkeFP for early bailout
+  auto q_dalke_fp = query.GetDalkeFP();
+  auto t_dalke_fp = target.GetDalkeFP();
+
+  // Use dalke_fp_contains for comprehensive screening
+  if (!dalke_fp_contains(t_dalke_fp, q_dalke_fp)) {
+    return false;
+  }
+
+  // query might be substructure of the target -- run a full substructure match
+  return _is_substruct_rdkit(target.GetBinaryMol(), query.GetBinaryMol());
+}
+
+// is_substruct for pure Mol type (no fingerprint optimization)
+static void is_substruct_mol(DataChunk &args, ExpressionState &state,
+                             Vector &result) {
   D_ASSERT(args.ColumnCount() == 2);
-  // args.data[i] is a FLAT_VECTOR
+  auto &left = args.data[0];
+  auto &right = args.data[1];
+
+  BinaryExecutor::Execute<string_t, string_t, bool>(
+      left, right, result, args.size(),
+      [&](string_t &left_pickle, string_t &right_pickle) {
+        return _is_substruct_rdkit(left_pickle.GetString(), right_pickle.GetString());
+      });
+}
+
+// is_substruct for UmbraMol type (with DalkeFP optimization)
+static void is_substruct_umbramol(DataChunk &args, ExpressionState &state,
+                                  Vector &result) {
+  D_ASSERT(args.ColumnCount() == 2);
   auto &left = args.data[0];
   auto &right = args.data[1];
 
@@ -139,22 +150,27 @@ static void is_substruct(DataChunk &args, ExpressionState &state,
       [&](string_t &left_umbra_blob, string_t &right_umbra_blob) {
         auto left_umbra_mol = umbra_mol_t(left_umbra_blob);
         auto right_umbra_mol = umbra_mol_t(right_umbra_blob);
-
-        return _is_substruct(left_umbra_mol, right_umbra_mol);
+        return _is_substruct_umbramol(left_umbra_mol, right_umbra_mol);
       });
 }
 
 void RegisterCompareFunctions(ExtensionLoader &loader) {
+  // is_exact_match: register for both Mol and UmbraMol
   ScalarFunctionSet set("is_exact_match");
-  // left type and right type
   set.AddFunction(ScalarFunction({duckdb_rdkit::Mol(), duckdb_rdkit::Mol()},
-                                 LogicalType::BOOLEAN, is_exact_match));
+                                 LogicalType::BOOLEAN, is_exact_match_mol));
+  set.AddFunction(ScalarFunction({duckdb_rdkit::UmbraMol(), duckdb_rdkit::UmbraMol()},
+                                 LogicalType::BOOLEAN, is_exact_match_umbramol));
   loader.RegisterFunction(set);
 
+  // is_substruct: register for both Mol and UmbraMol
   ScalarFunctionSet set_is_substruct("is_substruct");
   set_is_substruct.AddFunction(
       ScalarFunction({duckdb_rdkit::Mol(), duckdb_rdkit::Mol()},
-                     LogicalType::BOOLEAN, is_substruct));
+                     LogicalType::BOOLEAN, is_substruct_mol));
+  set_is_substruct.AddFunction(
+      ScalarFunction({duckdb_rdkit::UmbraMol(), duckdb_rdkit::UmbraMol()},
+                     LogicalType::BOOLEAN, is_substruct_umbramol));
   loader.RegisterFunction(set_is_substruct);
 }
 

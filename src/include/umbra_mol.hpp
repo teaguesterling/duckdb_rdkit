@@ -12,10 +12,43 @@
 
 namespace duckdb_rdkit {
 
-// This is to generate the prefix and concatenate it with the binary RDKit
-// molecule so that it can then be sent to a string_t. Return the std::string
-// because later the StringVector::AddStringOrBlob function takes a std::string,
-// not string_t.
+// Generate the 64-bit DalkeFP from an RDKit molecule
+// Bits 0-54: Dalke fragment patterns
+// Bits 55-58: Heavy atom count bucket
+// Bits 59-60: Ring count (0, 1, 2, 3+)
+// Bit 61: Has stereocenters
+// Bit 62: Has charges
+// Bit 63: Reserved
+uint64_t make_dalke_fp(const RDKit::ROMol &mol);
+
+// Check if target fingerprint can contain query fingerprint
+// Returns true if target MIGHT be a superstructure of query
+// Returns false if target definitely CANNOT contain query as substructure
+inline bool dalke_fp_contains(uint64_t target_fp, uint64_t query_fp) {
+  // 1. Size check: target must be >= query size (bits 55-58)
+  uint8_t target_size = (target_fp >> 55) & 0xF;
+  uint8_t query_size = (query_fp >> 55) & 0xF;
+  if (target_size < query_size) return false;
+
+  // 2. Ring check: target must have >= query rings (bits 59-60)
+  uint8_t target_rings = (target_fp >> 59) & 0x3;
+  uint8_t query_rings = (query_fp >> 59) & 0x3;
+  if (target_rings < query_rings) return false;
+
+  // 3. Stereo check: if query has stereo, target must too (bit 61)
+  if ((query_fp & (1ULL << 61)) && !(target_fp & (1ULL << 61))) return false;
+
+  // 4. Charge check: if query has charges, target must too (bit 62)
+  if ((query_fp & (1ULL << 62)) && !(target_fp & (1ULL << 62))) return false;
+
+  // 5. Fragment bits: all query bits must be in target (bits 0-54)
+  uint64_t frag_mask = (1ULL << 55) - 1;
+  if ((target_fp & query_fp & frag_mask) != (query_fp & frag_mask)) return false;
+
+  return true;  // Might be substruct, need full verification
+}
+
+// Generate UmbraMol string: [8B DalkeFP][RDKit Pickle]
 std::string get_umbra_mol_string(const RDKit::ROMol &mol);
 
 struct umbra_mol_t {

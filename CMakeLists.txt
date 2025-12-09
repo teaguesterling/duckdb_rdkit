@@ -251,6 +251,7 @@ set(EXTENSION_SOURCES
     src/mol_descriptors.cpp
     src/qed.cpp
     src/rdkit_log.cpp
+    src/dalke_fp.cpp
 )
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})

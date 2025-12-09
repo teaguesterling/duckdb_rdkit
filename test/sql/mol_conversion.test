@@ -57,10 +57,46 @@ SELECT TRY_CAST('NOTASMILES' AS mol);
 ----
 NULL
 
-# mol_to_rdkit_mol can convert the internal representation of a molecule in 
-# duckdb (umbra_mol) to the RDKit molecule.  This will output hex representation
+# umbramol_to_mol extracts the pure RDKit pickle from UmbraMol format
+# When displayed, Mol is cast to VARCHAR (SMILES)
 query I
-SELECT mol_to_rdkit_mol('C'::mol);
+SELECT umbramol_to_mol('C'::umbramol);
 ----
-\xEF\xBE\xAD\xDE\x00\x00\x00\x00\x10\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x80\x01\x06\x00@\x00\x00\x00\x04\x0BB\x00\x00\x00\x00\x17\x04\x00\x00\x00\x00\x00\x00\x00\x16
+C
+
+# mol_to_umbramol converts pure Mol to UmbraMol format
+# When displayed, UmbraMol is cast to VARCHAR (SMILES)
+query I
+SELECT mol_to_umbramol('C'::mol);
+----
+C
+
+# Roundtrip: Mol -> UmbraMol -> Mol preserves molecule
+query I
+SELECT umbramol_to_mol(mol_to_umbramol('c1ccccc1'::mol));
+----
+c1ccccc1
+
+# Roundtrip: UmbraMol -> Mol -> UmbraMol preserves molecule
+query I
+SELECT mol_to_umbramol(umbramol_to_mol('CCO'::umbramol));
+----
+CCO
+
+# Verify UmbraMol adds exactly 8 bytes (DalkeFP prefix) using BLOB cast
+query I
+SELECT octet_length(mol_to_umbramol('C'::mol)::blob) - octet_length('C'::mol::blob);
+----
+8
+
+# Mol and UmbraMol can be cast to BLOB for raw binary access
+query I
+SELECT octet_length('C'::mol::blob) > 0;
+----
+true
+
+query I
+SELECT octet_length('C'::umbramol::blob) > 0;
+----
+true
 

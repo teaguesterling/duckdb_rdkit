@@ -1,0 +1,129 @@
+# name: test/sql/dalke_fp.test
+# description: test DalkeFP type and functions
+# group: [duckdb_rdkit]
+
+require duckdb_rdkit
+
+# ============================================================================
+# dalke_fp() function tests
+# ============================================================================
+
+# dalke_fp from Mol returns a DalkeFP (UBIGINT alias)
+query I
+SELECT typeof(dalke_fp('CCO'::mol));
+----
+DalkeFP
+
+# dalke_fp from UmbraMol returns same fingerprint as from Mol
+query I
+SELECT dalke_fp('CCO'::mol) = dalke_fp('CCO'::umbramol);
+----
+true
+
+# Different molecules have different fingerprints
+query I
+SELECT dalke_fp('CCO'::mol) != dalke_fp('c1ccccc1'::mol);
+----
+true
+
+# Same molecule (different SMILES) has same fingerprint
+query I
+SELECT dalke_fp('C1=CC=CC=C1'::mol) = dalke_fp('c1ccccc1'::mol);
+----
+true
+
+# ============================================================================
+# dalke_fp_contains() function tests - basic substructure screening
+# ============================================================================
+
+# Ethanol contains hydroxyl (CO)
+query I
+SELECT dalke_fp_contains(dalke_fp('CCO'::mol), dalke_fp('CO'::mol));
+----
+true
+
+# Hydroxyl does NOT contain ethanol
+query I
+SELECT dalke_fp_contains(dalke_fp('CO'::mol), dalke_fp('CCO'::mol));
+----
+false
+
+# Toluene contains benzene
+query I
+SELECT dalke_fp_contains(dalke_fp('Cc1ccccc1'::mol), dalke_fp('c1ccccc1'::mol));
+----
+true
+
+# Benzene does NOT contain toluene (missing methyl)
+query I
+SELECT dalke_fp_contains(dalke_fp('c1ccccc1'::mol), dalke_fp('Cc1ccccc1'::mol));
+----
+false
+
+# Same molecule always contains itself
+query I
+SELECT dalke_fp_contains(dalke_fp('CCO'::mol), dalke_fp('CCO'::mol));
+----
+true
+
+# ============================================================================
+# Extended DalkeFP bits - heavy atom count screening
+# ============================================================================
+
+# Large molecule should NOT pass screening for small query (heavy atom check)
+# Benzene (6 heavy atoms) can't be substructure of methane (1 heavy atom)
+query I
+SELECT dalke_fp_contains(dalke_fp('C'::mol), dalke_fp('c1ccccc1'::mol));
+----
+false
+
+# ============================================================================
+# Extended DalkeFP bits - ring count screening
+# ============================================================================
+
+# Acyclic molecule can't contain ring
+query I
+SELECT dalke_fp_contains(dalke_fp('CCCCCC'::mol), dalke_fp('c1ccccc1'::mol));
+----
+false
+
+# Multi-ring molecule can contain single ring
+query I
+SELECT dalke_fp_contains(dalke_fp('c1ccc2ccccc2c1'::mol), dalke_fp('c1ccccc1'::mol));
+----
+true
+
+# ============================================================================
+# Extended DalkeFP bits - charge screening
+# ============================================================================
+
+# Neutral molecule can't contain charged query
+query I
+SELECT dalke_fp_contains(dalke_fp('CC'::mol), dalke_fp('[NH4+]'::mol));
+----
+false
+
+# Charged molecule can contain charged query
+query I
+SELECT dalke_fp_contains(dalke_fp('[NH4+]'::mol), dalke_fp('[NH4+]'::mol));
+----
+true
+
+# ============================================================================
+# DalkeFP with NULL handling
+# ============================================================================
+
+query I
+SELECT dalke_fp(NULL::mol);
+----
+NULL
+
+query I
+SELECT dalke_fp_contains(NULL, dalke_fp('C'::mol));
+----
+NULL
+
+query I
+SELECT dalke_fp_contains(dalke_fp('C'::mol), NULL);
+----
+NULL

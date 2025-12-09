@@ -19,8 +19,7 @@
 
 namespace duckdb_rdkit {
 
-// This enables the user to insert into a Mol column by just writing the SMILES
-// Duckdb will try to convert the string to a rdkit mol
+// VARCHAR -> Mol: Parse SMILES and create pure RDKit pickle
 // This is consistent with the RDKit Postgres cartridge behavior
 bool VarcharToMolCast(Vector &source, Vector &result, idx_t count,
                       CastParameters &parameters) {
@@ -29,12 +28,10 @@ bool VarcharToMolCast(Vector &source, Vector &result, idx_t count,
       source, result, count,
       [&](string_t smiles, ValidityMask &mask, idx_t idx) {
         try {
-          // this varchar is just a regular string, not a umbramol
-          // Try to see if it is a SMILES
           auto mol = rdkit_mol_from_smiles(smiles.GetString());
-          auto umbra_mol = get_umbra_mol_string(*mol);
-
-          return StringVector::AddStringOrBlob(result, umbra_mol);
+          // Create pure RDKit pickle (no DalkeFP prefix)
+          auto pickle = rdkit_mol_to_binary_mol(*mol);
+          return StringVector::AddStringOrBlob(result, pickle);
         } catch (...) {
           std::string error_msg = StringUtil::Format(
               "Could not convert string '%s' to Mol", smiles.GetString());
@@ -50,35 +47,96 @@ bool VarcharToMolCast(Vector &source, Vector &result, idx_t count,
   return all_converted;
 }
 
-void MolToVarchar(Vector &source, Vector &result, idx_t count) {
+// VARCHAR -> UmbraMol: Parse SMILES and create UmbraMol format [8B DalkeFP][RDKit Pickle]
+bool VarcharToUmbraMolCast(Vector &source, Vector &result, idx_t count,
+                           CastParameters &parameters) {
+  bool all_converted = true;
+  UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
+      source, result, count,
+      [&](string_t smiles, ValidityMask &mask, idx_t idx) {
+        try {
+          auto mol = rdkit_mol_from_smiles(smiles.GetString());
+          auto umbra_mol = get_umbra_mol_string(*mol);
+          return StringVector::AddStringOrBlob(result, umbra_mol);
+        } catch (...) {
+          std::string error_msg = StringUtil::Format(
+              "Could not convert string '%s' to UmbraMol", smiles.GetString());
+          if (parameters.strict) {
+            throw ConversionException(error_msg);
+          }
+          HandleCastError::AssignError(error_msg, parameters);
+          all_converted = false;
+          mask.SetInvalid(idx);
+          return string_t();
+        }
+      });
+  return all_converted;
+}
+
+// Mol -> VARCHAR: Pure RDKit pickle to SMILES
+bool MolToVarcharCast(Vector &source, Vector &result, idx_t count,
+                      CastParameters &parameters) {
+  UnaryExecutor::Execute<string_t, string_t>(
+      source, result, count, [&](string_t pickle) {
+        // Mol is a pure RDKit pickle - convert directly to SMILES
+        auto rdkit_mol = rdkit_binary_mol_to_mol(pickle.GetString());
+        auto smiles = rdkit_mol_to_smiles(*rdkit_mol);
+        return StringVector::AddString(result, smiles);
+      });
+  return true;
+}
+
+// UmbraMol -> VARCHAR: Extract pickle from UmbraMol format and convert to SMILES
+bool UmbraMolToVarcharCast(Vector &source, Vector &result, idx_t count,
+                           CastParameters &parameters) {
   UnaryExecutor::Execute<string_t, string_t>(
       source, result, count, [&](string_t b_umbra_mol) {
-        // The input is a string_t coming from the duckdb internals.
-        // The extension recognizes that this string_t is an
-        // UmbraMol BLOB and will trigger this cast function.
-        // Therefore, this function expects that the input
-        // contains a string that has the format of umbra_mol_t.
+        // UmbraMol format: [8B DalkeFP][RDKit Pickle]
         auto umbra_mol = umbra_mol_t(b_umbra_mol);
         auto bmol = umbra_mol.GetBinaryMol();
-
         auto rdkit_mol = rdkit_binary_mol_to_mol(bmol);
         auto smiles = rdkit_mol_to_smiles(*rdkit_mol);
         return StringVector::AddString(result, smiles);
       });
+  return true;
 }
 
-bool MolToVarcharCast(Vector &source, Vector &result, idx_t count,
-                      CastParameters &parameters) {
-  MolToVarchar(source, result, count);
+// Mol -> BLOB: Pass through raw binary data (Mol is already a BLOB alias)
+bool MolToBlobCast(Vector &source, Vector &result, idx_t count,
+                   CastParameters &parameters) {
+  UnaryExecutor::Execute<string_t, string_t>(
+      source, result, count, [&](string_t pickle) {
+        return StringVector::AddStringOrBlob(result, pickle.GetString());
+      });
+  return true;
+}
+
+// UmbraMol -> BLOB: Pass through raw binary data (UmbraMol is already a BLOB alias)
+bool UmbraMolToBlobCast(Vector &source, Vector &result, idx_t count,
+                        CastParameters &parameters) {
+  UnaryExecutor::Execute<string_t, string_t>(
+      source, result, count, [&](string_t umbra_mol) {
+        return StringVector::AddStringOrBlob(result, umbra_mol.GetString());
+      });
   return true;
 }
 
 void RegisterCasts(ExtensionLoader &loader) {
-  loader.RegisterCastFunction(LogicalType::VARCHAR, ::duckdb_rdkit::Mol(),
+  // Mol casts (pure RDKit pickle)
+  loader.RegisterCastFunction(LogicalType::VARCHAR, duckdb_rdkit::Mol(),
                               BoundCastInfo(VarcharToMolCast), 1);
-
   loader.RegisterCastFunction(duckdb_rdkit::Mol(), LogicalType::VARCHAR,
                               BoundCastInfo(MolToVarcharCast), 1);
+  loader.RegisterCastFunction(duckdb_rdkit::Mol(), LogicalType::BLOB,
+                              BoundCastInfo(MolToBlobCast), 1);
+
+  // UmbraMol casts ([8B DalkeFP][RDKit Pickle])
+  loader.RegisterCastFunction(LogicalType::VARCHAR, duckdb_rdkit::UmbraMol(),
+                              BoundCastInfo(VarcharToUmbraMolCast), 1);
+  loader.RegisterCastFunction(duckdb_rdkit::UmbraMol(), LogicalType::VARCHAR,
+                              BoundCastInfo(UmbraMolToVarcharCast), 1);
+  loader.RegisterCastFunction(duckdb_rdkit::UmbraMol(), LogicalType::BLOB,
+                              BoundCastInfo(UmbraMolToBlobCast), 1);
 }
 
 } // namespace duckdb_rdkit

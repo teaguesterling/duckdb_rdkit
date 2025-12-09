@@ -113,9 +113,12 @@ void SDFScanLocalState::ExtractNextChunk(SDFScanGlobalState &gstate,
       //! to be returned even if the molecule cannot be parsed
       if (cur_mol) {
         //! The column at the current iteration of i is the Mol type
-        //! In this case, we should convert the molecule object
-        //! to the "umbra" mol in duckdb_rdkit
+        //! Convert molecule to pure RDKit pickle format
         if (StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::Mol().ToString())) {
+          auto res = duckdb_rdkit::rdkit_mol_to_binary_mol(*cur_mol);
+          cur_row.emplace_back(res);
+        } else if (StringUtil::CIEquals(bind_data.types[i], duckdb_rdkit::UmbraMol().ToString())) {
+          //! UmbraMol format: [8B DalkeFP][RDKit Pickle]
           auto res = duckdb_rdkit::get_umbra_mol_string(*cur_mol);
           cur_row.emplace_back(res);
         } else {

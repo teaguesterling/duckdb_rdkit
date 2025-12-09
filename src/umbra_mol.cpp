@@ -66,8 +66,37 @@ std::vector<std::vector<string>> dalke_counts = {{"O", "2", "3", "1", "4", "5"},
                                                  {"CccC", "1"},
                                                  {"ccccc(c)c", "3"}};
 
+// Convert heavy atom count to a 4-bit bucket (0-15)
+// Ranges designed for typical drug-like molecules
+static uint8_t heavy_atom_bucket(unsigned int count) {
+  if (count <= 5) return 0;
+  if (count <= 10) return 1;
+  if (count <= 15) return 2;
+  if (count <= 20) return 3;
+  if (count <= 25) return 4;
+  if (count <= 30) return 5;
+  if (count <= 35) return 6;
+  if (count <= 40) return 7;
+  if (count <= 50) return 8;
+  if (count <= 60) return 9;
+  if (count <= 75) return 10;
+  if (count <= 90) return 11;
+  if (count <= 110) return 12;
+  if (count <= 140) return 13;
+  if (count <= 180) return 14;
+  return 15;  // 181+
+}
+
+// Convert ring count to 2-bit value (0, 1, 2, 3+)
+static uint8_t ring_count_bucket(unsigned int count) {
+  if (count >= 3) return 3;
+  return static_cast<uint8_t>(count);
+}
+
 uint64_t make_dalke_fp(const RDKit::ROMol &mol) {
-  std::bitset<64> bs;
+  uint64_t fp = 0;
+
+  // === Bits 0-54: Original Dalke fragment patterns ===
   RDKit::SubstructMatchParameters params;
   params.uniquify = true;
   params.useQueryQueryMatches = false;
@@ -77,15 +106,11 @@ uint64_t make_dalke_fp(const RDKit::ROMol &mol) {
   params.numThreads = 1;
 
   uint8_t curBit = 0;
-  // for each of the dalke fragments, check if it is found
-  // in the target molecule (the one that an UmbraMol will be constructed for)
-  // the dalke fragment is the "query" molecule in the SubstructMatch
-  // function
-  for (const auto &fp : dalke_counts) {
+  for (const auto &frag : dalke_counts) {
     std::unique_ptr<RDKit::ROMol> dalke_fp_mol;
 
     try {
-      dalke_fp_mol.reset(RDKit::SmilesToMol(fp[0], 0, false));
+      dalke_fp_mol.reset(RDKit::SmilesToMol(frag[0], 0, false));
     } catch (std::exception &e) {
       std::string msg = StringUtil::Format("%s", typeid(e).name());
       throw InvalidInputException(msg);
@@ -93,19 +118,52 @@ uint64_t make_dalke_fp(const RDKit::ROMol &mol) {
 
     auto matchVect = RDKit::SubstructMatch(mol, *dalke_fp_mol, params);
 
-    // if the target has the fp substructure in it at least $NUMBER of times
-    // it appears, set that bit
-    for (auto i = 1; i < fp.size(); i++) {
-      if (matchVect.size() >= std::stoi(fp[i])) {
-        bs.set(curBit);
+    for (auto i = 1; i < frag.size(); i++) {
+      if (matchVect.size() >= std::stoi(frag[i])) {
+        fp |= (1ULL << curBit);
       }
-
       curBit++;
     }
   }
-  auto k = bs.to_ullong();
   D_ASSERT(curBit == 55);
-  return k;
+
+  // === Bits 55-58: Heavy atom count bucket (4 bits) ===
+  unsigned int numHeavyAtoms = mol.getNumHeavyAtoms();
+  uint8_t ha_bucket = heavy_atom_bucket(numHeavyAtoms);
+  fp |= (static_cast<uint64_t>(ha_bucket) << 55);
+
+  // === Bits 59-60: Ring count bucket (2 bits) ===
+  unsigned int numRings = mol.getRingInfo()->numRings();
+  uint8_t ring_bucket = ring_count_bucket(numRings);
+  fp |= (static_cast<uint64_t>(ring_bucket) << 59);
+
+  // === Bit 61: Has stereocenters ===
+  bool hasStereo = false;
+  for (const auto atom : mol.atoms()) {
+    if (atom->getChiralTag() != RDKit::Atom::CHI_UNSPECIFIED) {
+      hasStereo = true;
+      break;
+    }
+  }
+  if (hasStereo) {
+    fp |= (1ULL << 61);
+  }
+
+  // === Bit 62: Has formal charges ===
+  bool hasCharges = false;
+  for (const auto atom : mol.atoms()) {
+    if (atom->getFormalCharge() != 0) {
+      hasCharges = true;
+      break;
+    }
+  }
+  if (hasCharges) {
+    fp |= (1ULL << 62);
+  }
+
+  // === Bit 63: Reserved (leave as 0) ===
+
+  return fp;
 }
 
 // "Umbra-mol" has more than just the binary molecule

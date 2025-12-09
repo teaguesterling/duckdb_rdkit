@@ -1,0 +1,177 @@
+# name: test/sql/umbramol.test
+# description: test UmbraMol type and functions
+# group: [duckdb_rdkit]
+
+require duckdb_rdkit
+
+# ============================================================================
+# UmbraMol type and casts
+# ============================================================================
+
+# ::umbramol cast is supported
+query I
+SELECT 'C1=CC=CC=C1'::umbramol;
+----
+c1ccccc1
+
+# ::umbramol cast with invalid SMILES throws an error
+statement error
+SELECT 'NOTASMILES'::umbramol;
+----
+Conversion Error: Could not convert string 'NOTASMILES' to UmbraMol
+
+# TRY_CAST returns NULL for invalid SMILES without error
+query I
+SELECT TRY_CAST('NOTASMILES' AS umbramol);
+----
+NULL
+
+# umbramol_from_smiles function
+query I
+SELECT umbramol_from_smiles('C1=CC=CC=C1');
+----
+c1ccccc1
+
+# umbramol_from_smiles on invalid SMILES returns NULL
+query I
+SELECT umbramol_from_smiles('NOTASMILES');
+----
+NULL
+
+# ============================================================================
+# is_substruct with UmbraMol (uses DalkeFP optimization)
+# ============================================================================
+
+# Toluene contains benzene
+query I
+SELECT is_substruct('Cc1ccccc1'::umbramol, 'c1ccccc1'::umbramol);
+----
+true
+
+# Benzene does NOT contain toluene
+query I
+SELECT is_substruct('c1ccccc1'::umbramol, 'Cc1ccccc1'::umbramol);
+----
+false
+
+# Same molecule is substructure of itself
+query I
+SELECT is_substruct('CCO'::umbramol, 'CCO'::umbramol);
+----
+true
+
+# Ethanol contains hydroxyl
+query I
+SELECT is_substruct('CCO'::umbramol, 'O'::umbramol);
+----
+true
+
+# ============================================================================
+# is_exact_match with UmbraMol (uses prefix optimization)
+# ============================================================================
+
+# Same molecule matches itself
+query I
+SELECT is_exact_match('CCO'::umbramol, 'CCO'::umbramol);
+----
+true
+
+# Different SMILES for same molecule matches
+query I
+SELECT is_exact_match('C1=CC=CC=C1'::umbramol, 'c1ccccc1'::umbramol);
+----
+true
+
+# Different molecules don't match
+query I
+SELECT is_exact_match('CCO'::umbramol, 'CC'::umbramol);
+----
+false
+
+# ============================================================================
+# Descriptors with UmbraMol
+# ============================================================================
+
+# mol_amw works with UmbraMol
+query I
+SELECT mol_amw('CCO'::umbramol) > 40;
+----
+true
+
+# mol_logp works with UmbraMol
+query I
+SELECT mol_logp('c1ccccc1'::umbramol) > 0;
+----
+true
+
+# mol_tpsa works with UmbraMol
+query I
+SELECT mol_tpsa('CCO'::umbramol) > 0;
+----
+true
+
+# mol_hbd works with UmbraMol (ethanol has 1 HBD)
+query I
+SELECT mol_hbd('CCO'::umbramol);
+----
+1
+
+# mol_hba works with UmbraMol (ethanol has 1 HBA)
+query I
+SELECT mol_hba('CCO'::umbramol);
+----
+1
+
+# mol_num_rotatable_bonds works with UmbraMol
+query I
+SELECT mol_num_rotatable_bonds('CCCCC'::umbramol);
+----
+2
+
+# mol_qed works with UmbraMol
+query I
+SELECT mol_qed('c1ccccc1'::umbramol) > 0;
+----
+true
+
+# mol_exactmw works with UmbraMol
+query I
+SELECT mol_exactmw('C'::umbramol) > 15 AND mol_exactmw('C'::umbramol) < 17;
+----
+true
+
+# ============================================================================
+# mol_to_smiles with UmbraMol
+# ============================================================================
+
+query I
+SELECT mol_to_smiles('C1=CC=CC=C1'::umbramol);
+----
+c1ccccc1
+
+# ============================================================================
+# UmbraMol in table storage and retrieval
+# ============================================================================
+
+statement ok
+CREATE TABLE umbramol_test (id INTEGER, mol UmbraMol);
+
+statement ok
+INSERT INTO umbramol_test VALUES (1, 'CCO'), (2, 'c1ccccc1'), (3, 'CC(=O)O');
+
+query II
+SELECT id, mol FROM umbramol_test ORDER BY id;
+----
+1	CCO
+2	c1ccccc1
+3	CC(=O)O
+
+# Query using is_substruct on stored UmbraMol
+query II
+SELECT id, mol FROM umbramol_test WHERE is_substruct(mol, 'O'::umbramol) ORDER BY id;
+----
+1	CCO
+3	CC(=O)O
+
+statement ok
+DROP TABLE umbramol_test;
