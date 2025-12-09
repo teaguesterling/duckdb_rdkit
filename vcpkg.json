@@ -5,7 +5,6 @@
     "boost-iostreams",
     "boost-json",
     "boost-serialization",
-    "boost-stacktrace",
     "boost-system",
     "freetype"
   ]
