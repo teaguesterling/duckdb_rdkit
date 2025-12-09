@@ -4,6 +4,7 @@
     "boost-serialization",
     "boost-iostreams",
     "boost-graph",
-    "boost-json"
+    "boost-json",
+    "freetype"
   ]
 }
